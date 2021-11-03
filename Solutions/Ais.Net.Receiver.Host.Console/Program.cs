@@ -6,6 +6,7 @@ namespace Ais.Net.Receiver.Host.Console
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Reactive.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -18,22 +19,23 @@ namespace Ais.Net.Receiver.Host.Console
     using Ais.Net.Receiver.Storage;
     using Ais.Net.Receiver.Storage.Azure.Blob;
     using Ais.Net.Receiver.Storage.Azure.Blob.Configuration;
-
+    using log4net.Config;
     using Microsoft.Extensions.Configuration;
 
     public static class Program
     {
+        private static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(Program));
+        
         public static async Task Main(string[] args)
         {
+            XmlConfigurator.Configure(new FileInfo(@"Program.config"));
+            
             IConfiguration config = new ConfigurationBuilder()
                             .AddJsonFile("settings.json", true, true)
                             .AddJsonFile("settings.local.json", true, true)
                             .Build();
 
             AisConfig aisConfig = config.GetSection("Ais").Get<AisConfig>();
-            StorageConfig storageConfig = config.GetSection("Storage").Get<StorageConfig>();
-
-            IStorageClient storageClient = new AzureAppendBlobStorageClient(storageConfig);
 
             INmeaReceiver receiver = new NetworkStreamNmeaReceiver(
                 aisConfig.Host,
@@ -62,21 +64,15 @@ namespace Ais.Net.Receiver.Host.Console
                 (uint mmsi, IVesselNavigation navigation, IVesselName name) = navigationWithName;
                 string positionText = navigation.Position is null ? "unknown position" : $"{navigation.Position.Latitude},{navigation.Position.Longitude}";
                 
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"[{mmsi}: '{name.VesselName.CleanVesselName()}'] - [{positionText}] - [{navigation.CourseOverGroundDegrees ?? 0}]");
-                Console.ResetColor();
+                // Console.ForegroundColor = ConsoleColor.Green;
+                // Console.WriteLine($"[{mmsi}: '{name.VesselName.CleanVesselName()}'] - [{positionText}] - [{navigation.CourseOverGroundDegrees ?? 0}]");
+                // Console.ResetColor();
             });
 
-            var batchBlock = new BatchBlock<string>(storageConfig.WriteBatchSize);
-            var actionBlock = new ActionBlock<IEnumerable<string>>(storageClient.PersistAsync);
 
-            batchBlock.LinkTo(actionBlock);
 
             // Write out the messages as they are received over the wire.
-            receiverHost.Sentences.Subscribe(sentence => Console.WriteLine(sentence));
-
-            // Persist the messages as they are received over the wire.
-            receiverHost.Sentences.Subscribe(batchBlock.AsObserver());
+            receiverHost.Sentences.Subscribe(sentence => Log.Info(sentence));
 
             var cts = new CancellationTokenSource();
 

@@ -61,7 +61,8 @@ namespace Ais.Net.Receiver.Parser
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[{messageType}] {e.Message}");
+                e.ToString();
+                // Console.WriteLine($"[{messageType}] {e.Message}");
             }
         }
 
